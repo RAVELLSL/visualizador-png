@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualizador de Imagens PNG</title>
+    <style>
+        /* Estilos básicos da página */
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            font-family: Arial, sans-serif;
+            background-color: #1a1a1a;
+            color: #fff;
+            overflow: hidden; 
+        }
+
+        /* --- CONTROLES PRINCIPAIS --- */
+
+        .upload-label {
+            padding: 12px 25px;
+            background-color: #007bff;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: background-color 0.3s ease, opacity 0.5s ease;
+            
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 20; 
+            opacity: 1; /* Garante que está visível no início */
+        }
+
+        .upload-label:hover {
+            background-color: #0056b3;
+        }
+
+        #file-input {
+            display: none;
+        }
+
+        /* --- CONTÊINER DA IMAGEM --- */
+        #image-display {
+            display: none; 
+            width: 100vw;
+            height: 100vh;
+            object-fit: contain;
+            background-color: #000;
+            
+            transition: opacity 0.2s ease-in-out;
+            opacity: 1;
+        }
+
+        #image-display.fade {
+            opacity: 0;
+        }
+
+        /* --- CONTROLES DE NAVEGAÇÃO --- */
+        
+        #controls {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+        }
+
+        .nav-button {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background-color: rgba(0, 0, 0, 0.4);
+            color: white;
+            border: none;
+            padding: 15px 20px;
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background-color 0.3s ease;
+        }
+
+        .nav-button:hover {
+            background-color: rgba(0, 0, 0, 0.7);
+        }
+
+        #nav-prev {
+            left: 20px;
+        }
+
+        #nav-next {
+            right: 20px;
+        }
+
+        /* === ATUALIZAÇÃO 2: Contador no canto inferior direito e discreto === */
+        #image-counter {
+            position: absolute;
+            bottom: 20px; /* Movido para baixo */
+            right: 20px;
+            padding: 5px 10px;
+            background-color: rgba(0, 0, 0, 0.4); /* Mais sutil */
+            border-radius: 5px;
+            font-size: 13px; /* Fonte menor */
+            color: rgba(255, 255, 255, 0.7); /* Cor mais suave */
+        }
+
+    </style>
+</head>
+<body>
+
+    <label id="upload-label" for="file-input" class="upload-label">Carregar PNGs</label>
+    
+    <input type="file" id="file-input" accept="image/png" multiple>
+
+    <img id="image-display" alt="Sua imagem carregada">
+
+    <div id="controls">
+        <button class="nav-button" id="nav-prev">&lt;</button>
+        <button class="nav-button" id="nav-next">&gt;</button>
+        <span id="image-counter"></span>
+    </div>
+
+
+    <script>
+        // Seleciona todos os elementos
+        const fileInput = document.getElementById('file-input');
+        const imageDisplay = document.getElementById('image-display');
+        const controlsContainer = document.getElementById('controls');
+        const navPrev = document.getElementById('nav-prev');
+        const navNext = document.getElementById('nav-next');
+        const imageCounter = document.getElementById('image-counter');
+        
+        // === ATUALIZAÇÃO 1: Seleciona o label de upload ===
+        const uploadLabel = document.getElementById('upload-label');
+
+        let loadedImages = [];
+        let currentIndex = 0;
+
+        // --- 1. OUVINTE DE CARREGAMENTO DE ARQUIVOS ---
+        
+        fileInput.addEventListener('change', function(event) {
+            const files = event.target.files;
+            const pngFiles = Array.from(files).filter(file => file.type === 'image/png');
+
+            if (pngFiles.length === 0) {
+                if (files.length > 0) {
+                    alert('Nenhum arquivo PNG válido foi selecionado.');
+                }
+                return;
+            }
+
+            if (pngFiles.length < files.length) {
+                alert(`Dos ${files.length} arquivos, ${files.length - pngFiles.length} não eram PNGs e foram ignorados.`);
+            }
+
+            // Limpa o estado anterior
+            loadedImages = [];
+            currentIndex = 0;
+            imageDisplay.style.display = 'none';
+            controlsContainer.style.display = 'none';
+
+            // --- Leitura de Múltiplos Arquivos ---
+            
+            const readFile = (file) => {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+            };
+
+            const readPromises = pngFiles.map(readFile);
+
+            Promise.all(readPromises)
+                .then(images => {
+                    loadedImages = images;
+                    
+                    if (loadedImages.length > 0) {
+                        displayImage(currentIndex);
+                        controlsContainer.style.display = 'block';
+                        
+                        // === ATUALIZAÇÃO 1: Esconde o botão de upload ===
+                        uploadLabel.style.display = 'none'; 
+                        
+                        updateControls();
+                    }
+                })
+                .catch(error => {
+                    console.error("Erro ao ler arquivos:", error);
+                    alert("Ocorreu um erro ao carregar uma ou mais imagens.");
+                });
+        });
+
+        // --- 2. FUNÇÕES DE EXIBIÇÃO E NAVEGAÇÃO ---
+
+        function displayImage(index) {
+            if (index < 0 || index >= loadedImages.length) return;
+            
+            imageDisplay.classList.add('fade');
+            
+            setTimeout(() => {
+                imageDisplay.src = loadedImages[index];
+                imageDisplay.style.display = 'block';
+                imageDisplay.classList.remove('fade');
+            }, 100); 
+        }
+
+        function updateControls() {
+            imageCounter.textContent = `Imagem ${currentIndex + 1} de ${loadedImages.length}`;
+            navPrev.style.display = (currentIndex > 0) ? 'block' : 'none';
+            navNext.style.display = (currentIndex < loadedImages.length - 1) ? 'block' : 'none';
+        }
+
+        // === ATUALIZAÇÃO 3: Funções separadas para Navegação ===
+        
+        function showPrevImage() {
+            if (currentIndex > 0) {
+                currentIndex--;
+                displayImage(currentIndex);
+                updateControls();
+            }
+        }
+
+        function showNextImage() {
+            if (currentIndex < loadedImages.length - 1) {
+                currentIndex++;
+                displayImage(currentIndex);
+                updateControls();
+            }
+        }
+
+        // --- 3. OUVINTES DE EVENTOS (Cliques e Teclado) ---
+
+        // Ouvintes de clique
+        navPrev.addEventListener('click', showPrevImage);
+        navNext.addEventListener('click', showNextImage);
+
+        // === ATUALIZAÇÃO 3: Ouvinte de Teclado ===
+        document.addEventListener('keydown', (event) => {
+            // Só executa se as imagens estiverem carregadas
+            if (loadedImages.length === 0) return; 
+
+            if (event.key === 'ArrowLeft') {
+                showPrevImage();
+            } else if (event.key === 'ArrowRight') {
+                showNextImage();
+            }
+        });
+
+    </script>
+
+</body>
+</html>
